@@ -7,6 +7,7 @@ import sys
 import speech_recognition as sr
 from sound import Sound
 
+
 class Window(QtWidgets.QWidget):
         def __init__(self, parent=None):
             QtWidgets.QWidget.__init__(self, parent)
@@ -88,6 +89,8 @@ class Window(QtWidgets.QWidget):
 
         def turn_off_sound(self):
             Sound.mute()
+            if not(Sound.is_muted()):
+                Sound.mute()
 
         def task_manager(self):
             os.system('taskmgr')
@@ -167,7 +170,7 @@ class Window(QtWidgets.QWidget):
                             self.added.addWidget(label_47, self.added.count()+1, 0)
                         else:
                             btn = QtWidgets.QPushButton(f'{self.commands[index][0][0]}')
-                            btn.clicked.connect(lambda: self.commands[index][1]())
+                            btn.clicked.connect(self.commands[index][1])
                             btn.setStyleSheet("background-color:#2191fb;"
                                           "border-style: outset;"
                                           "border-width: 2px;"
@@ -190,7 +193,7 @@ class Window(QtWidgets.QWidget):
 
         def delete(self):
             #непосредственное удаление дополнительных кнопок и лейблов
-            if self.layout.count() > 3:
+            if self.added.count() > 0:
                 while self.added.count():
                     item = self.added.takeAt(0)
                     widget = item.widget()
@@ -203,7 +206,8 @@ class Window(QtWidgets.QWidget):
 
         def speech_record(self):
             #очистка вывода с окна
-            if self.layout.count() > 3:
+            print(self.added.count())
+            if self.added.count() > 0:
                 self.delete()
 
             r = sr.Recognizer()
