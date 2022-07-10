@@ -1,132 +1,230 @@
-from audio_transcript import result
+#импорт необходимых библиотек
+from PyQt5 import QtCore, QtWidgets
 import os
-#import urlib.request
-url = "https://translated.turbopages.org/proxy_u/en-ru.ru.9a6ffa55-62bb097a-7595f4d2-74722d776562/http/www.nirsoft.net/utils/nircmd.zip"
-speech_words = result.split(' ')
-print(speech_words)
-#f = open('words.txt', 'r')
-word = 'открыть'
-#words_variants = [word.replace('\n', '') for word in f]
+import re
+import webbrowser
+import sys
+import speech_recognition as sr
+from sound import Sound
 
-class Commands():
+class Window(QtWidgets.QWidget):
+        def __init__(self, parent=None):
+            QtWidgets.QWidget.__init__(self, parent)
+            #настройки размера окна
+            self.WIDTH = 300
+            self.HEIGHT = 70
+            self.resize(self.WIDTH, self.HEIGHT)
+
+            #добавление кнопок и надписей
+            self.added = QtWidgets.QGridLayout()
+            self.label = QtWidgets.QLabel('Say Something!')
+            self.label.setAlignment(QtCore.Qt.AlignHCenter)
+            self.btnSay = QtWidgets.QPushButton("Начать запись")
+            self.layout = QtWidgets.QGridLayout()
+            self.layout.addWidget(self.label, 0, 0)
+            self.layout.addWidget(self.btnSay, 1, 0)
+            self.setLayout(self.layout)
+
+            self.commands = {1: (['открыть экранную клавиатуру',
+                                'откройте экранную клавиатуру',
+                                'откроете экранную клавиатуру',
+                                'открой экранную клавиатуру',
+                                'откроем экранную клавиатуру'], self.open_monitor_keyboard),
+
+                            2: (['выключить звук',
+                                'выключи звук',
+                                'выключишь звук',
+                                'выключите звук',
+                                'выключим звук'], self.turn_off_sound),
+
+                            3: (['включить звук',
+                                'включим звук',
+                                'включишь звук',
+                                'включите звук',
+                                'включи звук'], self.turn_on_sound),
+
+                            4: (r'(-?\d*[,]?\d*)(-)(-?\d*[,]?\d*)', self.sub),
+
+                            5: (['открыть диспетчер задач',
+                                'открой диспетчер задач',
+                                'откройте диспетчер задач',
+                                'откроете диспетчер задач',
+                                'откроем диспетчер задач'], self.task_manager),
+
+                            6: (['открой панель управления',
+                                'открыть панель управления',
+                                'откроете панель управления',
+                                'откроем панель управления',
+                                'откройте панель управления'], self.open_control),
+
+                            7: (['поиск в интернете',
+                                'поискать в интернете',
+                                'поищи в интернете',
+                                'поищем в интернете'], self.search),
+
+                            8: (['закрытие голосового ассистента',
+                                 'завершение работы',
+                                 'закрой голосового ассистента',
+                                 'закрыть голосовго ассистента',
+                                 'закрытие голосового помощника',
+                                 'закрой голосового помощника'], self.shut_down)}
+
+            self.btnSay.clicked.connect(self.speech_record)
+            self.btnSay.setStyleSheet("background-color:#2191fb;"
+                                      "border-style: outset;"
+                                      "border-width: 2px;"
+                                      "border-radius: 10px;"
+                                      "border-color: beige;"
+                                      "font: bold 14px;"
+                                      "min-width: 10em;"
+                                      "padding: 6px;")
         def open_monitor_keyboard(self):
                 os.system('%SystemRoot%\system32\osk.exe')
 
         def turn_on_sound(self):
-                pass
+            Sound.mute()
+            if Sound.is_muted():
+                    Sound.mute()
 
         def turn_off_sound(self):
+            Sound.mute()
+
+        def task_manager(self):
+            os.system('taskmgr')
+
+        def open_control(self):
+            os.system('Control')
+
+        def shut_down(self):
+            QtWidgets.qApp.quit()
+
+        def sub(self):
+            signs = [1, 1]
+            expression = re.search(self.commands[4][0], self.speech_command.replace(' ', '')).group()
+            if re.fullmatch(r'-\d*,?\d*?-\d*,?\d*?', expression):
+                signs[0] = -1
+            elif re.fullmatch(r'-\d*,?\d*?--\d*,?\d*?', expression):
+                signs[0] = -1
+                signs[1] = -1
+            elif re.fullmatch(r'\d*,?\d*?--\d*,?\d*?', expression):
+                signs[1] = -1
+
+            elements = list(filter(lambda x: x != '' and x != ' ', expression.replace(',', '.').split('-')))
+            print(expression)
+            print(elements)
+            print(signs)
+            label_sub = QtWidgets.QLabel(f'{expression} = {float(elements[0])*signs[0] - signs[1]*float(elements[1])}')
+            self.added.addWidget(label_sub, 5, 0)
+            self.layout.addLayout(self.added, 3, 0)
+
+
+        def search(self):
+            func = lambda text, commands: func(','.join(text.split(commands[0]+' ')), commands[1:]) if len(commands)>1 \
+                else ','.join(text.split(commands[0]+' '))
+            available_commands = [command for command in self.commands[7][0] if command in self.speech_command]
+            print(func(self.speech_command, available_commands))
+            requests = [non_empt for non_empt in func(self.speech_command, available_commands).split(',') if non_empt]
+            print(requests)
+            result = [webbrowser.open(f'https://yandex.ru/search/?text={request}') for request in requests]
+
+        def sub_exception(self):
+            try:
+                print('maybe correct', re.search(self.commands[4][0], self.speech_command.replace(' ', '')).groups())
+                return all(re.search(self.commands[4][0], self.speech_command.replace(' ', '')).groups())
+            except:
+                return False
+
+        def is_command(self):
+            func = lambda command: (command[0] if any([words in self.speech_command for words in command[1][0]]
+                                                      if command[0] != 4 else [self.sub_exception()]) else '')
+            result = list(map(func, self.commands.items()))
+
+            return [num_com for num_com in result if num_com]
+
+
+        def compare_words(self):
+            print([(x[0], x[1][0]) for x in self.commands.items()])
+            func_2 = lambda y, z: any([len([g for g in zip(z, word) if g[0] == g[1]])/len(word) >= 0.7 for word in y])
+            func_1 = lambda command: (command[0] if any([func_2(words.split(' '), speech_word)  for words in command[1][0]
+                                                    for speech_word in self.speech_words] if command[0] != 4
+                                                        else [re.search(r'\d|-', self.speech_command)]) else '')
+            result = list(map(func_1, self.commands.items()))
+            return [num_com for num_com in result if num_com]
+
+        def sending_result(self):
+            result = self.is_command()
+            if result:
+                return [self.commands[x][1]() for x in result]
+
+            compare_result = self.compare_words()
+            if compare_result:
+                #создает кнопки или предлагает вариант действия, если не было выполнена основная часть по поиску команд
+                label = QtWidgets.QLabel('Возможны вы имели в виду')
+                self.added.addWidget(label, 0, 0)
+                for index in compare_result:
+                        if index == 4 or index == 7:
+                            label_47 = QtWidgets.QLabel(f'{"Вычитание двух чисел" if index == 4 else self.commands[index][0][0].capitalize()}')
+                            self.added.addWidget(label_47, self.added.count()+1, 0)
+                        else:
+                            btn = QtWidgets.QPushButton(f'{self.commands[index][0][0]}')
+                            btn.clicked.connect(lambda: self.commands[index][1]())
+                            btn.setStyleSheet("background-color:#2191fb;"
+                                          "border-style: outset;"
+                                          "border-width: 2px;"
+                                          "border-radius: 10px;"
+                                          "border-color: beige;"
+                                          "font: bold 14px;"
+                                          "min-width: 10em;"
+                                          "padding: 6px;")
+                            self.added.addWidget(btn, self.added.count()+1, 0)
+
+
+
+                self.layout.addLayout(self.added, 3, 0)
+            else:
+                #пишется надпись если в речи не было даже чего то связанного с командами
+                label = QtWidgets.QLabel('Nothing was found')
+                self.added = QtWidgets.QGridLayout()
+                self.added.addWidget(label, 0, 1)
+                self.layout.addLayout(self.added, 3, 0)
+
+        def delete(self):
+            #непосредственное удаление дополнительных кнопок и лейблов
+            if self.layout.count() > 3:
+                while self.added.count():
+                    item = self.added.takeAt(0)
+                    widget = item.widget()
+                    if widget is not None:
+                         widget.deleteLater()
+                    else:
+                        self.delete(item.layout())
+            else:
                 pass
 
-        def sub(self, first_n, second_n):
-                print(first_n - second_n)
+        def speech_record(self):
+            #очистка вывода с окна
+            if self.layout.count() > 3:
+                self.delete()
 
-obj = Commands()
-#Проверка на принадлежность к командам
-commands = {1: {'открыть экранную клавиатуру': obj.open_monitor_keyboard,
-             'откройте экранную клавиатуру': obj.open_monitor_keyboard,
-            'откроете экранную клавиатуру': obj.open_monitor_keyboard,
-            'открой экранную клавиатуру': obj.open_monitor_keyboard,
-            'откроем экранную клавиатуру': obj.open_monitor_keyboard,},
-
-            2: {'выключить звук': obj.turn_off_sound,
-            'выключи звук': obj.turn_off_sound,
-            'выключишь звук': obj.turn_off_sound,
-            'выключите звук': obj.turn_off_sound,
-            'выключим звук': obj.turn_off_sound,},
-
-            3: {'включить звук': obj.turn_on_sound,
-            'включим звук': obj.turn_on_sound,
-            'включишь звук': obj.turn_on_sound,
-            'включите звук': obj.turn_on_sound,
-            'включи звук': obj.turn_on_sound,},
-
-            4: {'Вычитание': obj.sub}}
-list_commands = [command for command in commands.keys() if command != 'Вычитание']
-'''
-def dict_of_commands(commands):
-    commands_words = [(key, command.split(' ')) for key in commands.keys() for command in commands[key].keys()]
-    #print(commands_words)
-    a = {(x, y[0]):'None' if len(y) == 1 else sub_of_dict_commands(y[1:]) for x,y in commands_words}
-    return a
-def sub_of_dict_commands(commands):
-    commands_words = [commands]
-    #print(commands_words)
-    result = {x[0]: 'None' if len(x) == 1 else sub_of_dict_commands(x[1:]) for x in commands_words}
-    return result
-def command_conformity(words, commands, potential_command=[], potential_word = {1:'', 2: '', 3: '', 4: ''}, correct=0):
-    try:
-        word = words[0]
-    except:
-        return(potential_word, potential_command)
-    available_commands = dict_of_commands(commands)
-    mapping = [(key, len(list(filter(lambda x: x[0] == x[1], zip(key[1], word)))) / len(key[1]))
-               for key in available_commands.keys()]
-
-    for i in mapping:
-        if i[1] == 1 and not(i[0] in potential_command):
-            correct += 1
-            potential_word[i[0]] = potential_word[i[0]] + word
-        elif i[1] >= 0.6 and not(i[0] in potential_command):
-            correct += 0.5
-            potential_command.append(i[0])
-    command_conformity(words[1:], commands[])
-
-commands_list = [commands[x] for x in commands.keys()]
-'''
-def is_command():
-    commands_count = []
-    for key in commands.keys():
-        for i in commands[key]:
-            if i in result.lower():
-                commands_count.append((key, i))
-                break
-
-    if not commands_count:
-        result_speech = compare_words(speech_words)
-        commands_count = [(x,list(commands[x])[0]) for x in result_speech.keys() if result_speech[x] >=1]
-        return (commands_count, 0)
-    else:
-        return (commands_count, 1)
-
-
-def compare_words(words, possible_commands={x:0 for x in commands.keys()}):
-    try:
-        word = words[0]
-    except:
-        #print('here_2')
-        print(possible_commands)
-        return possible_commands
-    for key in commands.keys():
-        for command in commands[key]:
-            stop_com = False
-            for com_word in command.split(' '):
-                common_chars = list(filter(lambda x: x[0] == x[1], zip(com_word, word)))
-                print((len(common_chars) / len(com_word), 'word --- ', com_word, 'my word is ---- ', word))
-                if (len(common_chars) / len(com_word)) >= 0.5:
-                    possible_commands[key] += 1
-                    stop_com = True
-                    break
-            if stop_com: break
-    return compare_words(words[1:], possible_commands=possible_commands)
-
-def sending_result():
-    result = is_command()
-    try:
-        if result[1] == 1:
-            for i in
+            r = sr.Recognizer()
+            with sr.Microphone() as source:
+                audio = r.listen(source)
+            try:
+                self.speech_command = r.recognize_google(audio, language="ru-RU").lower()
+                self.speech_words = self.speech_command.split(' ')
+                print("Вы сказали " + self.speech_command)
+                self.sending_result()
+            except sr.UnknownValueError:
+                label = QtWidgets.QLabel('Речь не была распознана, повторите ещё раз')
+                self.added = QtWidgets.QGridLayout()
+                self.added.addWidget(label, 0, 1)
+                self.layout.addLayout(self.added, 3, 0)
 
 
 
-
-
-
-
-
-#try:
- #       commands[result]()
-#except:
-  #      potential_commands = [command for command in list_commands if command in result.lower()]
-   #     print(potential_commands)
-
-print(is_command())
+app = QtWidgets.QApplication([])
+app.setStyle('Breeze')
+window = Window()
+window.setWindowTitle("Speech regonition")
+window.show()
+sys.exit(app.exec_())
